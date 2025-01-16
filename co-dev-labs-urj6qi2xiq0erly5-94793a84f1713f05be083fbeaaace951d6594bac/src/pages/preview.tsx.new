@@ -1,0 +1,76 @@
+import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import PreviewContent from "@/components/PreviewContent";
+
+interface Link {
+  id: string;
+  title: string;
+  url: string;
+  type: string;
+  platform?: string;
+  order?: number;
+  createdAt: string;
+}
+
+export default function PreviewPage() {
+  const [links, setLinks] = useState<Link[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const linksResponse = await fetch('/api/links');
+
+        if (!linksResponse.ok) {
+          throw new Error('Failed to fetch links');
+        }
+
+        const linksData = await linksResponse.json();
+        // Sort links by order
+        const sortedLinks = linksData.sort((a: Link, b: Link) => {
+          return (a.order || 0) - (b.order || 0);
+        });
+        setLinks(sortedLinks);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+
+    // Set up an interval to refresh the data
+    const intervalId = setInterval(fetchData, 2000);
+
+    // Cleanup interval on component unmount
+    return () => clearInterval(intervalId);
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p>Loading preview...</p>
+      </div>
+    );
+  }
+
+  // Ensure we have user data before rendering
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p>Loading user data...</p>
+      </div>
+    );
+  }
+
+  return (
+    <PreviewContent 
+      links={links} 
+      userId={user.id} 
+      username={user.user_metadata?.username || user.email}
+      isFrame={false}
+    />
+  );
+}

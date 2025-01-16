@@ -1,0 +1,291 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                 String       @id @db.Uuid
+  email              String      @unique
+  username           String?     @unique
+  createdAt          DateTime     @default(now())
+  lastLogin          DateTime?
+  status             String      @default("active")
+  socialLinksPosition String      @default("bottom")
+  role               String      @default("user")
+  events             Event[]      @relation("CreatedBy")
+  series             Series[]     @relation("SeriesCreatedBy")
+  links              Link[]       @relation("LinkCreatedBy")
+  options            Option[]     @relation("OptionCreatedBy")
+  documents          Document[]   @relation("DocumentCreatedBy")
+  notices            Notice[]     @relation("NoticeCreatedBy")
+  appearance         Appearance[] @relation("AppearanceCreatedBy")
+  tickets            Ticket[]     @relation("TicketCreatedBy")
+  ticketResponses    TicketResponse[] @relation("ResponseCreatedBy")
+  settings           Settings?    @relation("UserSettings")
+  publicProfile      PublicProfile? @relation("PublicProfile")
+  timelinePosts     TimelinePost[] @relation("TimelinePostAuthor")
+  timelineAccess    TimelineAccess[] @relation("TimelineUserAccess")
+  likes            TimelinePostLike[] @relation("UserLikes")
+  comments         TimelinePostComment[] @relation("UserComments")
+}
+
+model Series {
+  id          String     @id @default(uuid())
+  title       String
+  description String?
+  startDate   DateTime   @default(now())
+  endDate     DateTime?
+  color       String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  createdBy   User       @relation("SeriesCreatedBy", fields: [userId], references: [id])
+  userId      String     @db.Uuid
+  events      Event[]    @relation("SeriesEvents")
+  documents   Document[] @relation("SeriesDocuments")
+  notices     Notice[]   @relation("SeriesNotices")
+}
+
+model Event {
+  id            String     @id @default(uuid())
+  title         String
+  slug          String?    @unique
+  startDate     DateTime   @default(now())
+  endDate       DateTime   @default(dbgenerated("NOW() + interval '1 hour'"))
+  type          String     @default("default")
+  description   String?
+  location      String?
+  classes       String[]
+  eventNumber   Int?
+  color         String?
+  attachments   Json?
+  attendees     Json?
+  timezone      String     @default("UTC")
+  reminders     Json?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @default(now()) @updatedAt
+  createdBy     User       @relation("CreatedBy", fields: [userId], references: [id])
+  userId        String     @db.Uuid
+  series        Series?    @relation("SeriesEvents", fields: [seriesId], references: [id], onDelete: SetNull)
+  seriesId      String?
+  documents     Document[] @relation("EventDocuments")
+  notices       Notice[]   @relation("EventNotices")
+  results       EventResult[] @relation("EventResults")
+  timeline      RaceTimeline? @relation("EventTimeline")
+}
+
+model Link {
+  id          String   @id @default(uuid())
+  title       String
+  url         String
+  type        String   @default("link")
+  platform    String?
+  order       Int      @default(0)
+  isPublic    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   User     @relation("LinkCreatedBy", fields: [userId], references: [id])
+  userId      String   @db.Uuid
+}
+
+model Option {
+  id        String   @id @default(uuid())
+  type      String
+  value     String
+  label     String
+  createdAt DateTime @default(now())
+  userId    String   @db.Uuid
+  createdBy User     @relation("OptionCreatedBy", fields: [userId], references: [id])
+
+  @@unique([type, value])
+}
+
+model Document {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  type      String
+  order     Int      @default(0)
+  eventId   String?
+  seriesId  String?
+  userId    String   @db.Uuid
+  event     Event?   @relation("EventDocuments", fields: [eventId], references: [id], onDelete: Cascade)
+  series    Series?  @relation("SeriesDocuments", fields: [seriesId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("DocumentCreatedBy", fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notice {
+  id        String   @id @default(uuid())
+  subject   String
+  content   String
+  sequence  Int      @default(0)
+  eventId   String?
+  seriesId  String?
+  userId    String   @db.Uuid
+  event     Event?   @relation("EventNotices", fields: [eventId], references: [id], onDelete: Cascade)
+  series    Series?  @relation("SeriesNotices", fields: [seriesId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("NoticeCreatedBy", fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Ticket {
+  id          String   @id @default(uuid())
+  subject     String
+  description String
+  status      String   @default("open") // open, in-progress, closed
+  priority    String   @default("medium") // low, medium, high
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  userId      String   @db.Uuid
+  createdBy   User     @relation("TicketCreatedBy", fields: [userId], references: [id])
+  responses   TicketResponse[]
+}
+
+model TicketResponse {
+  id        String   @id @default(uuid())
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String   @db.Uuid
+  ticketId  String
+  createdBy User     @relation("ResponseCreatedBy", fields: [userId], references: [id])
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+model Analytics {
+  id        String   @id @default(uuid())
+  type      String   // "google-analytics", "meta-pixel", "hotjar"
+  code      String   // The tracking code snippet
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Appearance {
+  id              String   @id @default(uuid())
+  fontFamily      String   @default("Inter")
+  fontSize        Int      @default(16)
+  fontColor       String   @default("#000000")
+  backgroundColor String   @default("#ffffff")
+  buttonColor     String   @default("#000000")
+  buttonFontColor String   @default("#ffffff")
+  buttonShape     String   @default("square")
+  buttonStyle     String   @default("default")
+  buttonShadow    String   @default("none")
+  iconColor       String   @default("#000000")
+  bio             String   @default("")
+  profileImage    String?
+  eventColors     Json     @default("{\"default\":\"#2563eb\",\"race\":\"#dc2626\",\"training\":\"#16a34a\",\"social\":\"#9333ea\",\"other\":\"#f59e0b\"}")
+  resultsView     String   @default("accordion")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  userId          String   @db.Uuid @unique
+  createdBy       User     @relation("AppearanceCreatedBy", fields: [userId], references: [id])
+}
+
+model EventResult {
+  id          String   @id @default(uuid())
+  dateRange   String
+  documentUrl String
+  documentName String
+  boatClass   String?
+  eventId     String
+  event       Event    @relation("EventResults", fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Settings {
+  id        String   @id @default(uuid())
+  timeZone  String   @default("UTC")
+  userId    String   @db.Uuid @unique
+  user      User     @relation("UserSettings", fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PublicProfile {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  userId      String   @db.Uuid @unique
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation("PublicProfile", fields: [userId], references: [id])
+
+  @@index([slug])
+}
+
+model RaceTimeline {
+  id                    String   @id @default(uuid())
+  eventId              String   @unique
+  isActive             Boolean  @default(true)
+  requireApproval      Boolean  @default(true)
+  allowPublicViewing   Boolean  @default(false)
+  allowParticipantPosting Boolean  @default(true)
+  access               TimelineAccess[]
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  event                Event    @relation("EventTimeline", fields: [eventId], references: [id], onDelete: Cascade)
+  posts                TimelinePost[] @relation("TimelinePosts")
+}
+
+model TimelineAccess {
+  id          String   @id @default(uuid())
+  timelineId  String
+  userId      String   @db.Uuid
+  role        String   // "SKIPPER" or "VIEWER"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  timeline    RaceTimeline @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+  user        User     @relation("TimelineUserAccess", fields: [userId], references: [id])
+
+  @@unique([timelineId, userId])
+}
+
+model TimelinePost {
+  id            String   @id @default(uuid())
+  content       String
+  mediaUrl      String?
+  mediaType     String?  // "image" or "video"
+  timelineId    String
+  userId        String   @db.Uuid
+  isApproved    Boolean  @default(false)
+  role          String   @default("viewer") // "skipper" or "viewer"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  timeline      RaceTimeline @relation("TimelinePosts", fields: [timelineId], references: [id], onDelete: Cascade)
+  author        User     @relation("TimelinePostAuthor", fields: [userId], references: [id])
+  likes         TimelinePostLike[] @relation("PostLikes")
+  comments      TimelinePostComment[] @relation("PostComments")
+}
+
+model TimelinePostLike {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+  post      TimelinePost @relation("PostLikes", fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserLikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+}
+
+model TimelinePostComment {
+  id        String   @id @default(uuid())
+  content   String
+  postId    String
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  post      TimelinePost @relation("PostComments", fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserComments", fields: [userId], references: [id], onDelete: Cascade)
+}

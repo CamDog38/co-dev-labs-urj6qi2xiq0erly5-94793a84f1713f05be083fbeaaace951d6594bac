@@ -1,0 +1,149 @@
+import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { Skeleton } from "@/components/ui/skeleton";
+import { PublicEventView } from '@/components/PublicEventView';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+
+// Dynamically import calendar components with loading states
+const CalendarWidget = dynamic(
+  () => import("@/components/CalendarWidget").then((mod) => mod.CalendarWidget),
+  {
+    loading: () => <CalendarSkeleton />,
+    ssr: false
+  }
+);
+
+const MobileCalendarWidget = dynamic(
+  () => import("@/components/MobileCalendarWidget").then((mod) => mod.MobileCalendarWidget),
+  {
+    loading: () => <CalendarSkeleton />,
+    ssr: false
+  }
+);
+
+// Skeleton component for loading state
+function CalendarSkeleton() {
+  return (
+    <div className="w-full h-[500px] rounded-lg">
+      <Skeleton className="w-full h-full" />
+    </div>
+  );
+}
+
+// Error display component
+function ErrorDisplay({ message }: { message: string }) {
+  return (
+    <Alert variant="destructive" className="mb-4">
+      <AlertCircle className="h-4 w-4" />
+      <AlertDescription>{message}</AlertDescription>
+    </Alert>
+  );
+}
+
+export default function CalendarPreview() {
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [events, setEvents] = useState<any[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const isMobile = useMediaQuery('(max-width: 768px)');
+
+  // Fetch events on component mount
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        setError(null);
+        const response = await fetch('/api/events/public');
+        if (!response.ok) {
+          throw new Error('Failed to fetch events');
+        }
+        const data = await response.json();
+        setEvents(data);
+      } catch (err) {
+        setError('Failed to load events. Please try again later.');
+        console.error('Error fetching events:', err);
+      } finally {
+        setIsInitialLoad(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
+
+  const handleEventClick = async (eventId: string) => {
+    try {
+      setError(null);
+      setLoading(true);
+      
+      // First try to find the event in our local state
+      const localEvent = events.find(e => e.id === eventId);
+      if (localEvent) {
+        setSelectedEvent(localEvent);
+        return;
+      }
+
+      // If not found locally, fetch from API
+      const response = await fetch(`/api/events/public?id=${eventId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch event details');
+      }
+      const event = await response.json();
+      setSelectedEvent(event);
+    } catch (err) {
+      setError('Failed to load event details. Please try again later.');
+      console.error('Error fetching event:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCalendarError = (error: Error) => {
+    console.error('Calendar error:', error);
+    setError(error.message);
+  };
+
+  if (isInitialLoad) {
+    return <CalendarSkeleton />;
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {error && <ErrorDisplay message={error} />}
+        
+        <div className="bg-white rounded-lg shadow-sm border h-[calc(100vh-4rem)]">
+          {isMobile ? (
+            <MobileCalendarWidget 
+              onEventClick={handleEventClick}
+              onError={handleCalendarError}
+              apiEndpoint="/api/events/public"
+              initialEvents={events}
+            />
+          ) : (
+            <CalendarWidget 
+              onEventClick={handleEventClick}
+              onError={handleCalendarError}
+              publicMode={true}
+              apiEndpoint="/api/events/public"
+              initialEvents={events}
+            />
+          )}
+        </div>
+
+        <Dialog 
+          open={!!selectedEvent} 
+          onOpenChange={(open) => !open && setSelectedEvent(null)}
+        >
+          <DialogContent className="max-w-2xl">
+            {selectedEvent && (
+              <PublicEventView event={selectedEvent} />
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
+  );
+}
