@@ -1,7 +1,5 @@
 {
   "build": {
-    "installCommand": "pnpm install --no-frozen-lockfile --prefer-offline",
-    "outputDirectory": "out",
-    "devCommand": "pnpm dev"
+    "outputDirectory": "out"
   }
 }
